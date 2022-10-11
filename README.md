@@ -98,9 +98,15 @@ services:
       - s3data:/data
   db:
     image: postgres
+    depends_on:
+      s3vol:
+        condition: service_healthy
     volumes:
       - s3data:/var/lib/postgresql/data
 ```
+
+Container healtcheck could be used, as in the above example, to force other services to wait all volume in synchronized. Healthcheck have a wait-time of **1 hour**.
+Consider to start first backup without dependencies if you evaluate the restore could need more time!
 
 ## Posix file attributes persist during sync
 
