@@ -1,0 +1,106 @@
+#!/bin/bash
+
+[[ "$TRACE" ]] && set -x
+
+function usage {
+cat <<-EOF
+	Usage: $PROGNAME [OPTIONS] <local-path> <remote-path>
+	Sync s3 directory locally and backup changed files on exit
+	  --force-restore      restore even if local directory is not empty
+	   eg: $PROGNAME /data s3://bucket/dir
+EOF
+}
+
+function error_exit {
+  echo "${1:-"Unknown Error"}" 1>&2
+  exit 1
+}
+
+PARSED_OPTIONS=$(getopt -n "$0" -o f --long "force-restore" -- "$@")
+if [ $? -ne 0 ]; then
+  exit 1
+fi
+eval set -- "$PARSED_OPTIONS"
+
+while true; do
+  case "$1" in
+    -f|--force-restore)
+      FORCE_RESTORE="true"
+      shift;;
+
+    --)
+      shift
+      break;;
+  esac
+done
+
+PROGNAME=$0
+LOCAL=$1
+REMOTE=$2
+HEALTHCHECK_FILE=/var/healthy.txt
+
+case $S3CMD_FINAL_STRATEGY in
+  "SYNC") SYNC="sync" ;;
+  "PUT") SYNC="put" ;;
+  *) SYNC="put" ;;
+esac
+
+function restore {
+  if [ "$(ls -A $LOCAL)" ]; then
+    if [[ ${FORCE_RESTORE:false} == 'true' ]]; then
+      error_exit "local directory is not empty"
+    fi
+  fi
+
+  echo "restoring $REMOTE => $LOCAL [sync]"
+  if ! s3cmd --preserve sync "$REMOTE" "$LOCAL"; then
+    error_exit "restore failed"
+  fi
+  touch $HEALTHCHECK_FILE
+}
+
+function backup {
+  echo "backup $LOCAL => $REMOTE [sync]"
+  if ! s3cmd --preserve --recursive $S3_SYNC_FLAGS sync "$LOCAL" "$REMOTE"; then
+    echo "backup failed" 1>&2
+    rm $HEALTHCHECK_FILE
+    return 1
+  fi
+  touch $HEALTHCHECK_FILE
+}
+
+function forced_backup {
+  echo "backup $LOCAL => $REMOTE [put]"
+  if ! s3cmd --preserve --recursive $S3_SYNC_FLAGS put "$LOCAL" "$REMOTE"; then
+    echo "backup failed" 1>&2
+    rm $HEALTHCHECK_FILE
+    return 1
+  fi
+  touch $HEALTHCHECK_FILE
+}
+
+function final_backup {
+  echo "backup $LOCAL => $REMOTE [$SYNC]"
+  while ! s3cmd --preserve --recursive $S3_SYNC_FLAGS $SYNC "$LOCAL" "$REMOTE"; do
+    echo "backup failed, will retry" 1>&2
+    sleep 1
+  done
+  exit 0
+}
+
+function idle {
+  echo "ready"
+  while true; do
+    sleep ${BACKUP_INTERVAL:-42} &
+    wait $!
+    [ -n "$BACKUP_INTERVAL" ] && backup
+  done
+}
+
+restore
+
+trap final_backup SIGHUP SIGINT SIGTERM
+trap "backup; idle" USR1
+trap "forced_backup; idle" USR2
+
+idle
