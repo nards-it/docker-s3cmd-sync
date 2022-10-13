@@ -38,6 +38,7 @@ PROGNAME=$0
 LOCAL=$1
 REMOTE=$2
 HEALTHCHECK_FILE=/var/healthy.txt
+CACHE_FILE=/var/s3cmd_cache.raw
 
 case $S3CMD_FINAL_STRATEGY in
   "SYNC") SYNC="sync" ;;
@@ -52,8 +53,11 @@ function restore {
     fi
   fi
 
+  echo "restore calculating $REMOTE => $LOCAL [sync]"
+  s3cmd --preserve --cache-file=CACHE_FILE --dry-run sync "$REMOTE" "$LOCAL"
+
   echo "restoring $REMOTE => $LOCAL [sync]"
-  if ! s3cmd --preserve sync "$REMOTE" "$LOCAL"; then
+  if ! s3cmd --preserve --cache-file=CACHE_FILE sync "$REMOTE" "$LOCAL"; then
     error_exit "restore failed"
   fi
   touch $HEALTHCHECK_FILE
@@ -61,7 +65,7 @@ function restore {
 
 function backup {
   echo "backup $LOCAL => $REMOTE [sync]"
-  if ! s3cmd --preserve --recursive $S3_SYNC_FLAGS sync "$LOCAL" "$REMOTE"; then
+  if ! s3cmd --preserve --recursive --cache-file=CACHE_FILE $S3_SYNC_FLAGS sync "$LOCAL" "$REMOTE"; then
     echo "backup failed" 1>&2
     rm $HEALTHCHECK_FILE
     return 1
@@ -71,7 +75,7 @@ function backup {
 
 function forced_backup {
   echo "backup $LOCAL => $REMOTE [put]"
-  if ! s3cmd --preserve --recursive $S3_SYNC_FLAGS put "$LOCAL" "$REMOTE"; then
+  if ! s3cmd --preserve --recursive --cache-file=CACHE_FILE $S3_SYNC_FLAGS put "$LOCAL" "$REMOTE"; then
     echo "backup failed" 1>&2
     rm $HEALTHCHECK_FILE
     return 1
@@ -81,7 +85,7 @@ function forced_backup {
 
 function final_backup {
   echo "backup $LOCAL => $REMOTE [$SYNC]"
-  while ! s3cmd --preserve --recursive $S3_SYNC_FLAGS $SYNC "$LOCAL" "$REMOTE"; do
+  while ! s3cmd --preserve --recursive --cache-file=CACHE_FILE $S3_SYNC_FLAGS $SYNC "$LOCAL" "$REMOTE"; do
     echo "backup failed, will retry" 1>&2
     sleep 1
   done
