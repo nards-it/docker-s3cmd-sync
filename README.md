@@ -1,3 +1,5 @@
+[![ci](https://github.com/nards-it/docker-s3cmd-sync/actions/workflows/main.yaml/badge.svg?branch=main)](https://github.com/nards-it/docker-s3cmd-sync/actions/workflows/main.yaml)
+
 # Docker sync volume using S3Cmd
 Creates a Docker container that is restored and backed up to a directory on s3, **keeping posix file attributes**.
 You could use this to run short lived processes that work with and persist data to and from S3.
