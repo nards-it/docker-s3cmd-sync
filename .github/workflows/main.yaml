@@ -44,5 +44,5 @@ jobs:
         with:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_PASSWORD }}
-          repository: ${{ secrets.DOCKERHUB_REPOSITORY }}
+          repository: ${{ variables.DOCKERHUB_REPOSITORY }}
           readme: "./README.md"
