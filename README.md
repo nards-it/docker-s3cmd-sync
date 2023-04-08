@@ -49,7 +49,7 @@ For the simplest usage, you can just start the data container:
 ```bash
 docker run -d --name my-data-container \
            -v /home/user/.s3/.s3cfg:/root/.s3cfg \
-           nardsit/docker-s3cmd-sync /data/ s3://mybucket/someprefix
+           nards/docker-s3cmd-sync /data/ s3://mybucket/someprefix
 ```
 
 This will download the data from the S3 location you specify into the
@@ -66,7 +66,7 @@ the suffix):
 ```bash
 docker run -d --name my-data-container -e BACKUP_INTERVAL=2m \
            -v /home/user/.s3/.s3cfg:/root/.s3cfg \
-           nardsit/docker-s3cmd-sync /data/ s3://mybucket/someprefix
+           nards/docker-s3cmd-sync /data/ s3://mybucket/someprefix
 ```
 
 A final put will always be performed on container shutdown, to reupload all files. It could be a sync in the future (see [Posix file attributes persist during sync](#posix-file-attributes-persist-during-sync) section).
@@ -102,7 +102,7 @@ volumes:
 
 services:
   s3vol:
-    image: nardsit/docker-s3cmd-sync
+    image: nards/docker-s3cmd-sync
     command: /data/ s3://mybucket/somefolder
     cap_add:
       - ALL
