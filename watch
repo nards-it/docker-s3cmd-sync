@@ -6,8 +6,12 @@ function usage {
 cat <<-EOF
 	Usage: $PROGNAME [OPTIONS] <local-path> <remote-path>
 	Sync s3 directory locally and backup changed files on exit
-	  --force-restore      restore even if local directory is not empty
-	   eg: $PROGNAME /data s3://bucket/dir
+    -i | --backup-interval <time> set interval between backups, default 10m [env BACKUP_INTERVAL="time"]
+	  -c | --clean-restore          restore only if local directory is empty [env CLEAN_RESTORE="true"]
+    -t | --two-way-sync           sync two ways on each cycle, default backups only [env TWO_WAY_SYNC="true"]
+    --final-strategy <mode>       set the backup strategy on shutdown signal trap, default AUTO
+                                    (default "put" to rewrite permissions) [env S3CMD_FINAL_STRATEGY="sync"]
+	   eg: $PROGNAME --backup-interval "5s" --two-way-sync /data/ s3://bucket/dir/
 EOF
 }
 
@@ -16,7 +20,7 @@ function error_exit {
   exit 1
 }
 
-PARSED_OPTIONS=$(getopt -n "$0" -o f --long "force-restore" -- "$@")
+PARSED_OPTIONS=$(getopt -n "$0" -o i:c:t --long "backup-interval:,clean-restore,two-way-sync,final-strategy:" -- "$@")
 if [ $? -ne 0 ]; then
   exit 1
 fi
@@ -24,8 +28,22 @@ eval set -- "$PARSED_OPTIONS"
 
 while true; do
   case "$1" in
-    -f|--force-restore)
-      FORCE_RESTORE="true"
+    -i|--backup-interval)
+      BACKUP_INTERVAL=$2
+      shift
+      shift;;
+
+    -c|--clean-restore)
+      CLEAN_RESTORE="true"
+      shift;;
+
+    -t|--two-way-sync)
+      TWO_WAY_SYNC="true"
+      shift;;
+
+    --final-strategy)
+      S3CMD_FINAL_STRATEGY=$2
+      shift
       shift;;
 
     --)
@@ -39,21 +57,28 @@ LOCAL=$1
 REMOTE=$2
 HEALTHCHECK_FILE=/var/healthy.txt
 
-case $S3CMD_FINAL_STRATEGY in
+BACKUP_INTERVAL=${BACKUP_INTERVAL:="10m"}
+TWO_WAY_SYNC=${TWO_WAY_SYNC:="false"}
+
+if [[ ${TWO_WAY_SYNC:false} == 'false' ]]; then
+  S3_GLOBAL_FLAGS=${S3_GLOBAL_FLAGS:="--delete-removed"}
+fi
+
+case ${S3CMD_FINAL_STRATEGY^^} in
   "SYNC") SYNC="sync" ;;
   "PUT") SYNC="put" ;;
   *) SYNC="put" ;;
 esac
 
 function restore {
-  if [ "$(ls -A $LOCAL)" ]; then
-    if [[ ${FORCE_RESTORE:false} == 'true' ]]; then
+  if [[ ${CLEAN_RESTORE:false} == 'true' ]]; then
+    if [ "$(ls -A $LOCAL)" ]; then
       error_exit "local directory is not empty"
     fi
   fi
 
   echo "restoring $REMOTE => $LOCAL [sync]"
-  if ! s3cmd --preserve sync "$REMOTE" "$LOCAL"; then
+  if ! s3cmd --preserve sync $S3_GLOBAL_FLAGS $S3_RESTORE_FLAGS "$REMOTE" "$LOCAL"; then
     error_exit "restore failed"
   fi
   touch $HEALTHCHECK_FILE
@@ -61,7 +86,7 @@ function restore {
 
 function backup {
   echo "backup $LOCAL => $REMOTE [sync]"
-  if ! s3cmd --preserve --recursive $S3_SYNC_FLAGS sync "$LOCAL" "$REMOTE"; then
+  if ! s3cmd --preserve --recursive $S3_GLOBAL_FLAGS $S3_BACKUP_FLAGS sync "$LOCAL" "$REMOTE"; then
     echo "backup failed" 1>&2
     rm $HEALTHCHECK_FILE
     return 1
@@ -71,7 +96,7 @@ function backup {
 
 function forced_backup {
   echo "backup $LOCAL => $REMOTE [put]"
-  if ! s3cmd --preserve --recursive $S3_SYNC_FLAGS put "$LOCAL" "$REMOTE"; then
+  if ! s3cmd --preserve --recursive $S3_GLOBAL_FLAGS $S3_BACKUP_FLAGS put "$LOCAL" "$REMOTE"; then
     echo "backup failed" 1>&2
     rm $HEALTHCHECK_FILE
     return 1
@@ -81,7 +106,7 @@ function forced_backup {
 
 function final_backup {
   echo "backup $LOCAL => $REMOTE [$SYNC]"
-  while ! s3cmd --preserve --recursive $S3_SYNC_FLAGS $SYNC "$LOCAL" "$REMOTE"; do
+  while ! s3cmd --preserve --recursive $S3_GLOBAL_FLAGS $S3_BACKUP_FINAL_FLAGS $SYNC "$LOCAL" "$REMOTE"; do
     echo "backup failed, will retry" 1>&2
     sleep 1
   done
@@ -91,9 +116,12 @@ function final_backup {
 function idle {
   echo "ready"
   while true; do
-    sleep ${BACKUP_INTERVAL:-42} &
+    sleep ${BACKUP_INTERVAL} &
     wait $!
     [ -n "$BACKUP_INTERVAL" ] && backup
+    if [[ ${TWO_WAY_SYNC:false} == 'true' ]]; then
+      [ -n "$BACKUP_INTERVAL" ] && restore
+    fi
   done
 }
 

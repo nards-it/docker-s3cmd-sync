@@ -20,7 +20,10 @@ VOLUME /data
 HEALTHCHECK --interval=2s --retries=1800 \
 	CMD stat /var/healthy.txt || exit 1
 
-ENV S3_SYNC_FLAGS "--delete-removed"
+ENV S3_GLOBAL_FLAGS ""
+ENV S3_BACKUP_FLAGS ""
+ENV S3_RESTORE_FLAGS ""
+ENV S3_BACKUP_FINAL_FLAGS ""
 ENV S3CMD_FINAL_STRATEGY "PUT"
 
 SHELL ["/bin/bash", "-c"]

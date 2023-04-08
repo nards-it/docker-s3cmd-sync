@@ -56,10 +56,27 @@ This will download the data from the S3 location you specify into the
 container's `/data` directory. When the container shuts down, the data will be
 synced back to S3.
 
+## Configuration
+
+Configuration options could be passed to the script by command line or by
+setting related environment variable. The command line option will always override
+the command line parameters.
+
+| Variable | Description | Command Line Option | Environment Variable |
+|---|---|---|---|
+| Backup interval | Time interval between backups (es. "10m", "6h") | -i \| --backup-interval \<time\> | $BACKUP_INTERVAL |
+| Clean restore | Restore only if local directory is empty, else the script fails | -c \| --clean-restore | $CLEAN_RESTORE |
+| Two-way sync | Does backup and restore an every cycle, else only does backup. This influence S3CMD sync flags.<br> :warning: **PARTIALLY WORKING** Read more at [Two-way sync](#two-way-sync) | -t \| --two-way-sync | $TWO_WAY_SYNC |
+| Final backup strategy | Sets the s3cmd final cycle strategy on shutdown signal trap. Default is "AUTO" to better preserve posix permissions, "PUT" and "SYNC" are available. | --final-strategy \<mode\> | $S3CMD_FINAL_STRATEGY |
+| S3CMD sync flags | Additional flags passed to s3cmd commands. Default to `--delete-removed`, or empty if two-way sync is enabled. Configurable only by environment variable | *n/d* | $S3_GLOBAL_FLAGS |
+|| Additional flags passed to s3cmd restore commands. Default empty. Configurable only by environment variable | *n/d* | $S3_RESTORE_FLAGS |
+|| Additional flags passed to s3cmd backup commands. Default empty. Configurable only by environment variable | *n/d* | $S3_BACKUP_FLAGS |
+|| Additional flags passed to s3cmd last backup command on gracefully stop. Default empty. Configurable only by environment variable | *n/d* | $S3_BACKUP_FINAL_FLAGS |
+
 ### Configuring a sync interval
 
-When the `BACKUP_INTERVAL` environment variable is set, a watcher process will
-sync the `/data` directory to S3 on the interval you specify. The interval can
+When the `-i <time>` command line option is given or the `BACKUP_INTERVAL` environment variable is set,
+a watcher process will sync the `/data` directory to S3 on the interval you specify. The interval can
 be specified in seconds, minutes, hours or days (adding `s`, `m`, `h` or `d` as
 the suffix):
 
@@ -68,8 +85,17 @@ docker run -d --name my-data-container -e BACKUP_INTERVAL=2m \
            -v /home/user/.s3/.s3cfg:/root/.s3cfg \
            nards/docker-s3cmd-sync /data/ s3://mybucket/someprefix
 ```
+### Final backup strategy
 
-A final put will always be performed on container shutdown, to reupload all files. It could be a sync in the future (see [Posix file attributes persist during sync](#posix-file-attributes-persist-during-sync) section).
+A final backup will always be performed when a shutdown event is trapped. The script will traps on `SIGHUP` `SIGINT` `SIGTERM` and grants docker container backup on gracefully shutdown.
+
+The environment variable `S3CMD_FINAL_STRATEGY` could be used to force the last sync strategy to:
+- `AUTO` (default) will select the best option to keep all permissions
+- `PUT` will upload again all files
+- `SYNC` will sync only identificable changed files
+
+It could be configured to optimize execution and posix permissions. Read more at [Posix file attributes persist during sync](#posix-file-attributes-persist-during-sync).
+
 
 ### Forcing a sync
 
@@ -86,6 +112,18 @@ A push can be forced by sending the container the `USR2` signal:
 ```bash
 docker kill --signal=USR2 my-data-container
 ```
+
+### Two-way sync
+
+> :warning: **PARTIALLY WORKING**: effective two-way sync is not implemented. This is actually a workaround.
+
+**Two-way sync** mode could be enabled by `-e TWO_WAY_SYNC="true"` or by command line. If you not enable the `TWO_WAY_SYNC` mode, if two or more folders are synchronized to same bucket/folder you cannot see modifications.
+
+If 2 or more folders are synchronized to the same bucket/folder it needs to propagate modifications periodically from *local* to *s3* and viceversa. Normal script flow propagate from *s3* to *local* only at startup, next only from *s3* to *local* periodically. The **two-way sync** mode changes the script flow, doing `backup` and `restore` phases on each cycle, instead of only `backup` phase.
+
+The two-way sync mode usually manages files creation and deletion, but this is not implemented on s3cmd and not supported by this library. File deletion is **disabled** by default activating the two-way sync mode and could be changed acting on **S3CMD sync flags** and on `--delete-removed` flag.
+
+This is a **temporary solution** and will be corrected on next versions, based on a better workaround or on s3cmd updates in that way.
 
 ### Using Compose and named volumes
 
@@ -127,17 +165,11 @@ Consider to start first backup without dependencies if you evaluate the restore 
 
 Traditional S3 bucket cannot persist posix file attributes, as creation date and posix file and folder permissions.
 
-Using S3Cmd tool we can persist posix file attributes during sync process, but actually with some limitations. The s3cmd sync command checks file dimension and MD5 hash value in order to know if a file is changed or not. So if only the file attributes changes the file will not be updated to S3 bucket.
+Using S3Cmd tool we can persist posix file attributes during `sync` process, but actually with some limitations. The s3cmd sync command checks file dimension and MD5 hash value in order to know if a file is changed or not. So if only the file attributes changes the file will not be updated to S3 bucket. The s3cmd `put` command is not affected by this lack and will ever set permissions correctly.
 
-There is an Issue opened to S3Cmd project to find a way to sync files on file attributes changing, but it is not yet resolver. Now you can force a put to all bucket to recover 
+There is an Issue opened to S3Cmd project to find a way to sync files on file attributes changing, but it is not yet resolved. Waiting the Issue will be solved, the script defaults force a `put` as backup shutdown strategy, to ensure all permissions will be backed up correctly. If you don't care it, you could set `sync` as final backup strategy.
 
 You can find Issue on S3Cmd repository here: [https://github.com/s3tools/s3cmd/issues/1280](https://github.com/s3tools/s3cmd/issues/1280)
-
-### Temporarily strategy on final sync
-
-The environment variable `S3CMD_FINAL_STRATEGY` could be temporarily used to force the last sync strategy to:
-- `PUT` (default) as the secure option to upload again all files
-- `SYNC` to sync only identificable changed files
 
 ## Contributing
 
