@@ -1,4 +1,17 @@
-[![ci](https://github.com/nards-it/docker-s3cmd-sync/actions/workflows/main.yaml/badge.svg?branch=main)](https://github.com/nards-it/docker-s3cmd-sync/actions/workflows/main.yaml)
+![Docker Image Version (latest semver)](https://img.shields.io/docker/v/nards/docker-s3cmd-sync?sort=semver&label=Version&logo=docker)
+![Docker Image Size (latest semver)](https://img.shields.io/docker/image-size/nards/docker-s3cmd-sync?label=Size&logo=docker)
+![Docker Pulls](https://img.shields.io/docker/pulls/nards/docker-s3cmd-sync?label=Pulls&logo=docker)
+![Docker Stars](https://img.shields.io/docker/stars/nards/docker-s3cmd-sync?label=Stars&logo=docker)
+![GitHub Repo forks](https://img.shields.io/github/forks/nards-it/docker-s3cmd-sync?label=Forks&logo=github)
+![GitHub Repo stars](https://img.shields.io/github/stars/nards-it/docker-s3cmd-sync?label=Stars&logo=github)
+
+![GitHub Workflow Status](https://img.shields.io/github/actions/workflow/status/nards-it/docker-s3cmd-sync/main.yaml?label=Latest%20build&logo=github)
+![GitHub Workflow Status](https://img.shields.io/github/actions/workflow/status/nards-it/docker-s3cmd-sync/release.yaml?label=Last%20release%20build&logo=github)
+![GitHub issues](https://img.shields.io/github/issues/nards-it/docker-s3cmd-sync?label=Issues&logo=github)
+![GitHub pull requests](https://img.shields.io/github/issues-pr/nards-it/docker-s3cmd-sync?label=Pull%20requests&logo=github)
+![GitHub commits since latest release (by SemVer)](https://img.shields.io/github/commits-since/nards-it/docker-s3cmd-sync/latest?sort=semver)
+![GitHub Licence](https://img.shields.io/github/license/nards-it/docker-s3cmd-sync)
+
 
 # Docker sync volume using S3Cmd
 Creates a Docker container that is restored and backed up to a directory on s3, **keeping posix file attributes**.
